@@ -75,12 +75,15 @@ class Player(simple_player.Player):
 
         piece_counts = defaultdict(lambda: 0)
         location_bonus = defaultdict(lambda: 0)
+        unit_location = {RP: set(), RK: set(), BP: set(), BK: set(), }
 
         for loc in state.board:
             loc_val = state.board[loc]
             if loc_val != EM:
                 piece_counts[loc_val] += 1
                 location_bonus[loc_val] += LOC_BONUS[loc_val][loc]
+                if loc_val == RK or loc_val == BK:
+                    unit_location[loc_val].add(loc)
 
         opponent_color = OPPONENT_COLOR[self.color]
 
@@ -95,6 +98,13 @@ class Player(simple_player.Player):
             # The opponent has no tools left
             return INFINITY
 
+        my_kings_distance = 0
+        op_kings_distance = 0
+        if state.turns_since_last_jump > 12 or (my_u < 8 and op_u < 8):
+            # endgame
+            my_kings_distance = findKingsMinDistacesSum(self.color, unit_location)
+            op_kings_distance = findKingsMinDistacesSum(opponent_color, unit_location)
+
         # if 12 turns without capture or <7 pieces, calculate distance between king and closest piece.
         #       the smaller the distance, the better bonus
 
@@ -106,11 +116,10 @@ class Player(simple_player.Player):
         my_pawn_moves, my_king_moves = calc_all_moves(state, state.curr_player)
         op_pawn_moves, op_king_moves = calc_all_moves(state, opponent_color)
 
-        my_moves = PAWN_MOVE_WEIGHT * len(my_pawn_moves) + KING_MOVE_WEIGHT * len(my_king_moves)
-        op_moves = PAWN_MOVE_WEIGHT * len(op_pawn_moves) + KING_MOVE_WEIGHT * len(op_king_moves)
+        my_mobility = PAWN_MOVE_WEIGHT * len(my_pawn_moves) + KING_MOVE_WEIGHT * len(my_king_moves)
+        op_mobility = PAWN_MOVE_WEIGHT * len(op_pawn_moves) + KING_MOVE_WEIGHT * len(op_king_moves)
 
-        return my_u + my_moves + my_king_center - op_u - op_moves - op_king_center
-
+        return my_u + my_mobility + my_location_bonus - op_u - op_mobility - op_location_bonus
 
     def __repr__(self):
         return '{} {}'.format(abstract.AbstractPlayer.__repr__(self), 'better_h')
@@ -155,7 +164,26 @@ def calc_capture_moves(state, player):
                           and state.board[k] == EM]
     return capture_pawn_moves, capture_king_moves
 
+
 def calc_all_moves(state, player):
     single_pawn_moves, single_king_moves = calc_single_moves(state, player)
     capture_pawn_moves, capture_king_moves = calc_capture_moves(state, player)
     return single_pawn_moves + capture_pawn_moves, single_king_moves + capture_king_moves
+
+
+def distance(loc1, loc2):
+    if loc2[0] > loc1[0]:
+        return abs(loc1[1] - loc2[1])
+    else:
+        return abs(loc1[0] - loc2[0])
+
+
+def findKingsMinDistacesSum(player, unit_location):
+    opponent_color = OPPONENT_COLOR[player]
+    return sum(
+        min(
+            distance(king, unit) for unit in
+            unit_location[PAWN_COLOR[opponent_color]].union(unit_location[KING_COLOR[opponent_color]])
+        ) for king in unit_location[KING_COLOR[player]]
+    )
+
