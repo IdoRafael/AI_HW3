@@ -5,11 +5,11 @@
 
 import abstract
 import players.simple_player as simple_player
-from utils import MiniMaxWithAlphaBetaPruning, INFINITY, run_with_limited_time, ExceededTimeError
-from checkers.consts import EM, BK, RK, RP, BP, PAWN_COLOR, KING_COLOR, OPPONENT_COLOR, MAX_TURNS_NO_JUMP, RED_PLAYER, BLACK_PLAYER
+from utils import INFINITY
+from checkers.consts import EM, BK, RK, RP, BP, PAWN_COLOR, KING_COLOR, OPPONENT_COLOR, MAX_TURNS_NO_JUMP, \
+    OPPONENT_COLORS
 from collections import defaultdict
 from checkers.moves import GameMove, PAWN_SINGLE_MOVES, KING_SINGLE_MOVES, PAWN_CAPTURE_MOVES, KING_CAPTURE_MOVES
-from checkers.consts import OPPONENT_COLORS
 
 #===============================================================================
 # Globals
@@ -48,7 +48,7 @@ LOC_BONUS[BP] = {(i, j): (LOC_BONUS[RP])[(7 - i, 7 - j)]
 LOC_BONUS[BK] = {(i, j): (LOC_BONUS[RK])[(7 - i, 7 - j)]
                  for (i, j) in LOC_BONUS[RK]}
 MAX_DISTANCE = 7
-DISTANCE_WEIGHT = 4
+DISTANCE_WEIGHT = 10
 
 #===============================================================================
 # Player
@@ -102,24 +102,28 @@ class Player(simple_player.Player):
 
         my_kings_distance_bonus = 0
         op_kings_distance_bonus = 0
+        my_location_bonus = 0
+        op_location_bonus = 0
+
         if state.turns_since_last_jump > 12 or (my_u < 8 and op_u < 8):
             # endgame
             if piece_counts[KING_COLOR[self.color]] > 0:
-                my_kings_average_distance = find_kings_min_distaces_sum(self.color, unit_location) / piece_counts[KING_COLOR[self.color]]
+                my_kings_average_distance = find_kings_min_distances_sum(self.color, unit_location) / piece_counts[KING_COLOR[self.color]]
                 if my_kings_average_distance > 0:
-                    my_kings_distance_bonus = DISTANCE_WEIGHT * (MAX_DISTANCE - my_kings_average_distance)
+                    my_kings_distance_bonus = ((state.turns_since_last_jump / MAX_TURNS_NO_JUMP) *
+                                               DISTANCE_WEIGHT * (MAX_DISTANCE - my_kings_average_distance))
 
             if piece_counts[KING_COLOR[opponent_color]] > 0:
-                op_kings_average_distance = find_kings_min_distaces_sum(opponent_color, unit_location) / piece_counts[KING_COLOR[opponent_color]]
-
-
-        # if 12 turns without capture or <7 pieces, calculate distance between king and closest piece.
-        #       the smaller the distance, the better bonus
-
-        my_location_bonus = ((PAWN_LOC_WEIGHT * location_bonus[KING_COLOR[self.color]]) +
-                             (KING_LOC_WEIGHT * location_bonus[KING_COLOR[self.color]]))
-        op_location_bonus = ((PAWN_LOC_WEIGHT * location_bonus[KING_COLOR[opponent_color]]) +
-                             (KING_LOC_WEIGHT * location_bonus[KING_COLOR[opponent_color]]))
+                op_kings_average_distance = find_kings_min_distances_sum(opponent_color, unit_location) / piece_counts[KING_COLOR[opponent_color]]
+                if op_kings_average_distance > 0:
+                    op_kings_distance_bonus = ((state.turns_since_last_jump / MAX_TURNS_NO_JUMP) *
+                                               DISTANCE_WEIGHT * (MAX_DISTANCE - op_kings_average_distance))
+        else:
+            # not endgame
+            my_location_bonus = ((PAWN_LOC_WEIGHT * location_bonus[KING_COLOR[self.color]]) +
+                                 (KING_LOC_WEIGHT * location_bonus[KING_COLOR[self.color]]))
+            op_location_bonus = ((PAWN_LOC_WEIGHT * location_bonus[KING_COLOR[opponent_color]]) +
+                                 (KING_LOC_WEIGHT * location_bonus[KING_COLOR[opponent_color]]))
 
         my_pawn_moves, my_king_moves = calc_all_moves(state, state.curr_player)
         op_pawn_moves, op_king_moves = calc_all_moves(state, opponent_color)
@@ -127,7 +131,8 @@ class Player(simple_player.Player):
         my_mobility = PAWN_MOVE_WEIGHT * len(my_pawn_moves) + KING_MOVE_WEIGHT * len(my_king_moves)
         op_mobility = PAWN_MOVE_WEIGHT * len(op_pawn_moves) + KING_MOVE_WEIGHT * len(op_king_moves)
 
-        return my_u + my_mobility + my_location_bonus - op_u - op_mobility - op_location_bonus
+        return ((my_u + my_mobility + my_location_bonus + my_kings_distance_bonus) -
+                (op_u + op_mobility + op_location_bonus + op_kings_distance_bonus))
 
     def __repr__(self):
         return '{} {}'.format(abstract.AbstractPlayer.__repr__(self), 'better_h')
@@ -186,7 +191,7 @@ def distance(loc1, loc2):
         return abs(loc1[0] - loc2[0])
 
 
-def find_kings_min_distaces_sum(player, unit_location):
+def find_kings_min_distances_sum(player, unit_location):
     opponent_color = OPPONENT_COLOR[player]
     return sum(
         min(
