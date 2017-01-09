@@ -47,6 +47,8 @@ LOC_BONUS[BP] = {(i, j): (LOC_BONUS[RP])[(7 - i, 7 - j)]
                  for (i, j) in LOC_BONUS[RP]}
 LOC_BONUS[BK] = {(i, j): (LOC_BONUS[RK])[(7 - i, 7 - j)]
                  for (i, j) in LOC_BONUS[RK]}
+MAX_DISTANCE = 7
+DISTANCE_WEIGHT = 4
 
 #===============================================================================
 # Player
@@ -98,12 +100,18 @@ class Player(simple_player.Player):
             # The opponent has no tools left
             return INFINITY
 
-        my_kings_distance = 0
-        op_kings_distance = 0
+        my_kings_distance_bonus = 0
+        op_kings_distance_bonus = 0
         if state.turns_since_last_jump > 12 or (my_u < 8 and op_u < 8):
             # endgame
-            my_kings_distance = findKingsMinDistacesSum(self.color, unit_location)
-            op_kings_distance = findKingsMinDistacesSum(opponent_color, unit_location)
+            if piece_counts[KING_COLOR[self.color]] > 0:
+                my_kings_average_distance = find_kings_min_distaces_sum(self.color, unit_location) / piece_counts[KING_COLOR[self.color]]
+                if my_kings_average_distance > 0:
+                    my_kings_distance_bonus = DISTANCE_WEIGHT * (MAX_DISTANCE - my_kings_average_distance)
+
+            if piece_counts[KING_COLOR[opponent_color]] > 0:
+                op_kings_average_distance = find_kings_min_distaces_sum(opponent_color, unit_location) / piece_counts[KING_COLOR[opponent_color]]
+
 
         # if 12 turns without capture or <7 pieces, calculate distance between king and closest piece.
         #       the smaller the distance, the better bonus
@@ -178,12 +186,12 @@ def distance(loc1, loc2):
         return abs(loc1[0] - loc2[0])
 
 
-def findKingsMinDistacesSum(player, unit_location):
+def find_kings_min_distaces_sum(player, unit_location):
     opponent_color = OPPONENT_COLOR[player]
     return sum(
         min(
-            distance(king, unit) for unit in
-            unit_location[PAWN_COLOR[opponent_color]].union(unit_location[KING_COLOR[opponent_color]])
-        ) for king in unit_location[KING_COLOR[player]]
+            (distance(king, unit) for unit in
+             unit_location[PAWN_COLOR[opponent_color]].union(unit_location[KING_COLOR[opponent_color]]))
+            , default=0) for king in unit_location[KING_COLOR[player]]
     )
 
