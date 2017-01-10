@@ -84,7 +84,7 @@ class Player(simple_player.Player):
             loc_val = state.board[loc]
             if loc_val != EM:
                 piece_counts[loc_val] += 1
-                location_bonus[loc_val] += LOC_BONUS[loc_val][loc]
+                location_bonus[loc_val] += (LOC_BONUS[loc_val])[loc]
                 if loc_val == RK or loc_val == BK:
                     unit_location[loc_val].add(loc)
 
@@ -107,24 +107,22 @@ class Player(simple_player.Player):
         op_location_bonus = 0
 
         if (state.turns_since_last_jump > 12 or
-                (piece_counts[PAWN_COLOR[self.color]] + piece_counts[KING_COLOR[self.color]] < 8
-                 and piece_counts[PAWN_COLOR[opponent_color]] + piece_counts[KING_COLOR[opponent_color]] < 8)):
+                (piece_counts[PAWN_COLOR[self.color]] + piece_counts[KING_COLOR[self.color]] < 7
+                 and piece_counts[PAWN_COLOR[opponent_color]] + piece_counts[KING_COLOR[opponent_color]] < 7)):
             # endgame - try to minimize distance
             if piece_counts[KING_COLOR[self.color]] > 0:
-                my_kings_average_distance = find_kings_min_distances_sum(self.color, unit_location) / piece_counts[KING_COLOR[self.color]]
-                if my_kings_average_distance > 0:
-                    my_kings_distance_bonus = ((state.turns_since_last_jump / MAX_TURNS_NO_JUMP) *
-                                               DISTANCE_WEIGHT * (DISTANCE_BONUS - my_kings_average_distance))
+                my_kings_distance_bonus = kings_min_distance_to_op(self.color, unit_location)
+                if my_kings_distance_bonus > 0:
+                    my_kings_distance_bonus = DISTANCE_WEIGHT * (DISTANCE_BONUS - my_kings_distance_bonus)
 
             if piece_counts[KING_COLOR[opponent_color]] > 0:
-                op_kings_average_distance = find_kings_min_distances_sum(opponent_color, unit_location) / piece_counts[KING_COLOR[opponent_color]]
-                if op_kings_average_distance > 0:
-                    op_kings_distance_bonus = ((state.turns_since_last_jump / MAX_TURNS_NO_JUMP) *
-                                               DISTANCE_WEIGHT * (DISTANCE_BONUS - op_kings_average_distance))
+                op_kings_distance_bonus = kings_min_distance_to_op(opponent_color, unit_location)
+                if op_kings_distance_bonus > 0:
+                    op_kings_distance_bonus = DISTANCE_WEIGHT * (DISTANCE_BONUS - op_kings_distance_bonus)
 
-        my_location_bonus = ((PAWN_LOC_WEIGHT * location_bonus[KING_COLOR[self.color]]) +
+        my_location_bonus = ((PAWN_LOC_WEIGHT * location_bonus[PAWN_COLOR[self.color]]) +
                              (KING_LOC_WEIGHT * location_bonus[KING_COLOR[self.color]]))
-        op_location_bonus = ((PAWN_LOC_WEIGHT * location_bonus[KING_COLOR[opponent_color]]) +
+        op_location_bonus = ((PAWN_LOC_WEIGHT * location_bonus[PAWN_COLOR[opponent_color]]) +
                              (KING_LOC_WEIGHT * location_bonus[KING_COLOR[opponent_color]]))
 
         my_pawn_moves, my_king_moves = calc_all_moves(state, state.curr_player)
@@ -133,15 +131,6 @@ class Player(simple_player.Player):
         # mobility
         my_mobility = PAWN_MOVE_WEIGHT * len(my_pawn_moves) + KING_MOVE_WEIGHT * len(my_king_moves)
         op_mobility = PAWN_MOVE_WEIGHT * len(op_pawn_moves) + KING_MOVE_WEIGHT * len(op_king_moves)
-
-        # runaway checkers
-        # for move in my_pawn_moves:
-        #     row_distance = abs(move.target_loc[0] - BACK_ROW[self.color])
-        #     if (row_distance == 0 or
-        #             (row_distance == 1 and (st)))
-        #
-        # for move in op_pawn_moves:
-        # for all available pawn moves - if target_loc passed enemy lines and clear line to kinghood, add bonus
 
         return ((my_u + my_mobility + my_location_bonus + my_kings_distance_bonus) -
                 (op_u + op_mobility + op_location_bonus + op_kings_distance_bonus))
@@ -200,9 +189,9 @@ def distance(loc1, loc2):
     return hypot(loc2[0] - loc1[0], loc2[1] - loc1[1])
 
 
-def find_kings_min_distances_sum(player, unit_location):
+def kings_min_distance_to_op(player, unit_location):
     opponent_color = OPPONENT_COLOR[player]
-    return sum(
+    return min(
         min(
             (distance(king, unit) for unit in
              unit_location[PAWN_COLOR[opponent_color]].union(unit_location[KING_COLOR[opponent_color]]))
