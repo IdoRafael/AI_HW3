@@ -16,4 +16,4 @@ class Player(ibh.Player):
         super().__init__(setup_time, player_color, time_per_k_turns, k)
 
     def __repr__(self):
-        return '{} {}'.format(abstract.AbstractPlayer.__repr__(self), 'competition')
+        return '{} {}'.format(abstract.AbstractPlayer.__repr__(self), 'Original_Name_LOLZ0RZ')
